@@ -564,20 +564,21 @@ class AcademyCohortView(APIView, HeaderLimitOffsetPagination, GenerateLookupsMix
         except Cohort.DoesNotExist:
             raise ValidationException("Cohort doesn't exist", code=400)
 
+        cohort.stage = DELETED
+        cohort.save()
+
         # Student
         cohort_users = CohortUser.objects.filter(
             role=STUDENT,
             cohort__id=cohort_id
         )
 
-        # Checks if the cohort has any students before deleting
-        if cohort_users.count() > 0:
-            raise ValidationException("Please remove all students before removing a cohort", code=400)
+        # TODO: this in one future maybe will be removed
+        for cohort_user in cohort_users:
+            cohort_user.delete()
 
-        cohort.stage = DELETED
-        cohort.save()
         self.cache.clear()
-        return Response(None, status=status.HTTP_200_OK)
+        return Response(None, status=status.HTTP_204_NO_CONTENT)
 
 
 class CertificateAllView(APIView, HeaderLimitOffsetPagination):
