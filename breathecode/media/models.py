@@ -26,7 +26,10 @@ class Media(models.Model):
     hits = models.IntegerField(default=0)
 
     categories = models.ManyToManyField(Category, blank=True)
-    academy = models.ForeignKey(Academy, on_delete=models.CASCADE, blank=True, null=True)
+    academy = models.ForeignKey(Academy,
+                                on_delete=models.CASCADE,
+                                blank=True,
+                                null=True)
 
     created_at = models.DateTimeField(auto_now_add=True, editable=False)
     updated_at = models.DateTimeField(auto_now=True, editable=False)
