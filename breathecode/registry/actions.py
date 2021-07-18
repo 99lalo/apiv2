@@ -1,3 +1,4 @@
+from breathecode.utils.validation_exception import ValidationException
 import logging, json
 from slugify import slugify
 from breathecode.utils import APIException
@@ -167,7 +168,7 @@ def sync_with_github(asset_slug, author_id=None):
                         technology.save()
                     asset.technologies.add(technology)
 
-        asset.status_text = "Successfully Synched"
+        asset.status_text = 'Successfully Synched'
         asset.status = 'OK'
         asset.save()
     except Exception as e:
@@ -196,3 +197,149 @@ def get_url_info(url: str):
     org_name = url[last_slash_index + 1:repo_name_position - 1]
 
     return org_name, repo_name
+
+
+def generate_learn_json(asset_slug, author_id=None):
+
+    try:
+
+        asset = Asset.objects.filter(slug=asset_slug).first()
+        if asset is None:
+            raise Exception(
+                f'Asset with slug {asset_slug} not found when attempting to sync with github'
+            )
+
+        if asset.author is not None:
+            author_id = asset.author.id
+
+        if author_id is None:
+            raise Exception(
+                f'System does not know what github credentials to use to retrive asset info for: {asset_slug}'
+            )
+
+        org_name, repo_name = get_url_info(asset.url)
+
+        credentials = CredentialsGithub.objects.filter(
+            user__id=author_id).first()
+        if credentials is None:
+            raise Exception(
+                f'Github credentials for this user {author_id} not found when sync asset {asset_slug}'
+            )
+
+        g = Github(credentials.token)
+        repo = g.get_repo(f'{org_name}/{repo_name}')
+        readme_file = repo.get_contents('README.md')
+
+        es_readme_file, it_readme_file, preview, graded, solution, learn_file = None
+
+        try:
+            es_readme_file = repo.get_contents('README.es.md')
+        except:
+            logger.debug('No README.es.md found')
+
+        try:
+            it_readme_file = repo.get_contents('README.it.md')
+        except:
+            logger.debug('No README.it.md found')
+
+        try:
+            preview = repo.get_contents('preview.png')
+        except:
+            logger.debug('No preview.png found')
+
+        try:
+            graded = repo.get_contents('test.py')
+        except:
+            try:
+                graded = repo.get_contents('test.js')
+            except:
+                try:
+                    graded = repo.get_contents('test.jsx')
+                except:
+                    logger.debug('No test.py, test.js, or test.jsx found')
+
+        try:
+            solution = repo.get_branch(branch='solution')
+        except:
+            logger.debug('No solution branch found')
+
+        try:
+            learn_file = repo.get_contents('learn.json')
+        except:
+            try:
+                learn_file = repo.get_contents('.learn/learn.json')
+            except:
+                try:
+                    learn_file = repo.get_contents('bc.json')
+                except:
+                    try:
+                        learn_file = repo.get_contents('.learn/bc.json')
+                    except:
+                        raise Exception(
+                            'No configuration learn.json or bc.json file was found'
+                        )
+
+        if learn_file is not None:
+            config = json.loads(learn_file.decoded_content.decode('utf-8'))
+            updated_config = {}
+            if 'title' in config:
+                updated_config['title'] = config['title']
+            if 'slug' in config:
+                updated_config['slug'] = config['slug']
+            if 'status' in config:
+                updated_config['status'] = config['status']
+            if solution is not None:
+                updated_config['solution'] = solution['path']
+            if preview is not None:
+                updated_config['preview'] = preview['path']
+            if 'difficulty' in config:
+                updated_config['difficulty'] = config['difficulty']
+            if 'technologies' in config:
+                updated_config['technologies'] = config['technologies']
+            if 'language' in config:
+                updated_config['language'] = config['language']
+            if 'duration' in config:
+                updated_config['duration'] = config['duration']
+            if graded is not None:
+                updated_config['graded'] = True
+            if readme_file is not None:
+                updated_config['translations'] = ['us']
+            if es_readme_file is not None:
+                updated_config['translations'].append('es')
+            if it_readme_file is not None:
+                updated_config['translations'].append('it')
+            if 'description' in config:
+                updated_config['description'] = config['description']
+            if 'talents' in config:
+                updated_config['talents'] = config['talents']
+
+        updated_learn_file = json.dumps(updated_config)
+
+        try:
+            source_branch = repo.get_branch('master')
+        except:
+            try:
+                source_branch = repo.get_branch('main')
+            except:
+                raise ValidationException(
+                    'Source branch invalid, please create master branch')
+
+        if source_branch is not None:
+            repo.create_git_ref(ref='refs/heads/learn_json',
+                                sha=source_branch.commit.sha)
+
+        repo.update_file(learn_file.path,
+                         'more tests',
+                         updated_learn_file,
+                         learn_file.sha,
+                         branch='learn_json')
+
+        return repo.create_pull(
+            title='Updated learn.json based on content in repo',
+            body='',
+            head='learn_json',
+            base='master')
+
+    except Exception as e:
+        logger.error(f'Error generating learn_json from github: ' + str(e))
+        raise ValidationException('')
