@@ -5,7 +5,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth.admin import UserAdmin
 from breathecode.admissions.admin import CohortAdmin
 from .models import Asset, AssetTranslation, AssetTechnology, AssetAlias
-from .tasks import async_sync_with_github
+from .tasks import async_sync_with_github, async_generate_learn_json
 from .actions import sync_with_github
 
 logger = logging.getLogger(__name__)
@@ -47,6 +47,15 @@ def sync_github(modeladmin, request, queryset):
 
 
 sync_github.short_description = 'Sync With Github'
+
+
+def generate_learn_json(modeladmin, request, queryset):
+    assets = queryset.all()
+    for a in assets:
+        async_generate_learn_json.delay(a.slug, request.user.id)
+
+
+sync_github.short_description = 'Generate learn.json'
 
 
 def author_aalejo(modeladmin, request, queryset):
