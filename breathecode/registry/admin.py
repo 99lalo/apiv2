@@ -52,6 +52,7 @@ sync_github.short_description = 'Sync With Github'
 def generate_learn_json(modeladmin, request, queryset):
     assets = queryset.all()
     for a in assets:
+        logger.debug(a)
         async_generate_learn_json.delay(a.slug, request.user.id)
 
 

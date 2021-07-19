@@ -200,7 +200,6 @@ def get_url_info(url: str):
 
 
 def generate_learn_json(asset_slug, author_id=None):
-
     try:
 
         asset = Asset.objects.filter(slug=asset_slug).first()
